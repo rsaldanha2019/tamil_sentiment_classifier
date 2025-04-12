@@ -8,7 +8,7 @@ import numpy as np
 
 class LlamaClassifier:
     def __init__(self):
-        login(token="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")  # Replace with your token if needed
+        login(token="hf_token")  # Replace with your token if needed
 
         BASE_MODEL = "meta-llama/Llama-3.2-3B-Instruct"
         self.device = "cuda" if torch.cuda.is_available() else "cpu"
