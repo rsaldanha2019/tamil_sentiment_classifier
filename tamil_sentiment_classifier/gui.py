@@ -1,16 +1,16 @@
+from re import escape
 import sys
+import os
 from PySide6.QtWidgets import (
     QApplication, QWidget, QVBoxLayout, QLabel, QTextEdit,
-    QPushButton, QHBoxLayout, QCheckBox, QComboBox, QSizePolicy
+    QPushButton, QHBoxLayout, QCheckBox, QComboBox, QSizePolicy, QTabWidget
 )
-from PySide6.QtGui import QTextCursor
-from PySide6.QtCore import Qt
+from PySide6.QtGui import QTextCursor, QPixmap, QFontDatabase
+from PySide6.QtCore import Qt, QTimer
 from indic_transliteration import sanscript
 from indic_transliteration.sanscript import transliterate
 import matplotlib.pyplot as plt
 from matplotlib.backends.backend_qt5agg import FigureCanvasQTAgg as FigureCanvas
-from matplotlib.figure import Figure
-import numpy as np
 
 from tamil_sentiment_classifier.llama_classifier import LlamaClassifier
 from tamil_sentiment_classifier.muril_classifier import MurilClassifier
@@ -25,34 +25,55 @@ MODEL_MAP = {
 class TamilClassifierGUI(QWidget):
     def __init__(self):
         super().__init__()
-        self.setWindowTitle("Tamil Text Sentiment Classifier")
+        self.setWindowTitle("Tamil Sentiment Analyzer")
         self.resize(800, 600)
 
         self.transliteration_enabled = True
         self.model_type = "llama"
         self.classifier = MODEL_MAP[self.model_type]()
+        self.canvas = None
 
         self.initUI()
-        # Hide the Explain button if initial model is llama
-        if self.model_type == "llama":
-            self.explain_button.setVisible(False)
         self.setStyleSheet(self.styles())
+        self.update_tabs_visibility()
 
     def initUI(self):
         layout = QVBoxLayout(self)
 
+        # Title
+        self.title_bar = QHBoxLayout()
+        image_path = os.path.join("images", "nitk_logo.png")
+        self.image_placeholder = QLabel()
+        pixmap = QPixmap(image_path)
+        if pixmap.isNull():
+            self.image_placeholder.setText("Logo")
+        else:
+            self.image_placeholder.setPixmap(pixmap.scaled(80, 80, Qt.KeepAspectRatio, Qt.SmoothTransformation))
+        self.image_placeholder.setAlignment(Qt.AlignLeft | Qt.AlignVCenter)
+        self.title_text = QLabel("SCaLAR Sentiment")
+        self.title_text.setAlignment(Qt.AlignVCenter | Qt.AlignHCenter | Qt.AlignRight)
+        self.title_bar.addWidget(self.image_placeholder)
+        self.title_bar.addStretch()
+        self.title_bar.addWidget(self.title_text)
+        self.animate_label_color(
+            colors=["#2F4F4F", "#8B0000", "#6A5ACD", "#556B2F", "#4682B4"],
+            font_sizes=[22, 24, 26, 24]
+        )
+        layout.addLayout(self.title_bar)
+
+        # Input
         self.label = QLabel("Enter Tamil or Tanglish (SPACE to convert):")
         layout.addWidget(self.label)
 
         self.text_box = QTextEdit()
         self.text_box.setPlaceholderText("Type your Tamil or Tanglish text here...")
-        self.text_box.setMinimumHeight(120)
-        self.text_box.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Expanding)
+        self.text_box.setMinimumHeight(60)
+        self.text_box.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Minimum)
         self.text_box.textChanged.connect(self.transliterate_on_space)
         layout.addWidget(self.text_box)
 
+        # Controls
         controls = QHBoxLayout()
-
         self.translit_checkbox = QCheckBox("Transliterate (Tanglish → Tamil)")
         self.translit_checkbox.setChecked(True)
         self.translit_checkbox.stateChanged.connect(self.toggle_transliteration)
@@ -67,20 +88,48 @@ class TamilClassifierGUI(QWidget):
         self.classify_button.clicked.connect(self.classify_text)
         controls.addWidget(self.classify_button)
 
-        self.explain_button = QPushButton("Explain")
-        self.explain_button.clicked.connect(self.explain_text)
-        controls.addWidget(self.explain_button)
-
+        self.clear_button = QPushButton("Clear")
+        self.clear_button.clicked.connect(self.clear_inputs)
+        controls.addWidget(self.clear_button)
         layout.addLayout(controls)
 
-        self.result_label = QLabel("Prediction / Explanation Output:")
+        # Tabs
+        self.result_label = QLabel("Output:")
         layout.addWidget(self.result_label)
+
+        self.tabs = QTabWidget()
+        layout.addWidget(self.tabs)
 
         self.result_output = QTextEdit()
         self.result_output.setReadOnly(True)
-        self.result_output.setMinimumHeight(200)
-        self.result_output.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Expanding)
-        layout.addWidget(self.result_output)
+        self.tabs.addTab(self.result_output, "Classification Output")
+
+        self.explanation_output = QTextEdit()
+        self.explanation_output.setReadOnly(True)
+        self.tabs.addTab(self.explanation_output, "Explanation Analysis")
+
+        self.sentiment_bar_output = QWidget()
+        self.sentiment_bar_layout = QVBoxLayout(self.sentiment_bar_output)
+        self.tabs.addTab(self.sentiment_bar_output, "Sentiment Bar")
+
+    def animate_label_color(self, colors, font_sizes, index=0):
+        fancy_font = "Old English Text MT"
+        available_fonts = QFontDatabase().families()
+        font_family = fancy_font if fancy_font in available_fonts else "Times New Roman"
+
+        color = colors[index % len(colors)]
+        font_size = font_sizes[index % len(font_sizes)]
+
+        self.title_text.setStyleSheet(
+            f"""
+            font-size: {font_size}px;
+            font-weight: bold;
+            font-style: italic;
+            color: {color};
+            font-family: '{font_family}';
+            """
+        )
+        QTimer.singleShot(1000, lambda: self.animate_label_color(colors, font_sizes, index + 1))
 
     def toggle_transliteration(self):
         self.transliteration_enabled = self.translit_checkbox.isChecked()
@@ -106,50 +155,100 @@ class TamilClassifierGUI(QWidget):
         if model_name != self.model_type:
             self.model_type = model_name
             self.classifier = MODEL_MAP[self.model_type]()
+            self.clear_outputs()
+            self.update_tabs_visibility()
 
-        # Toggle visibility of Explain button
-        if self.model_type == "llama":
-            self.explain_button.setVisible(False)
-        else:
-            self.explain_button.setVisible(True)
+    def update_tabs_visibility(self):
+        is_llama = self.model_type == "llama"
+        self.tabs.setTabVisible(1, not is_llama)  # Explanation tab
+        self.tabs.setTabVisible(2, not is_llama)  # Sentiment Bar
 
     def classify_text(self):
-        input_text = self.text_box.toPlainText().strip()
-        if input_text:
-            prediction = self.classifier.classify(input_text)
-            self.result_output.setPlainText(str(prediction))
-            self.result_output.moveCursor(QTextCursor.End)
-
-    def explain_text(self):
         input_text = self.text_box.toPlainText().strip()
         if not input_text:
             return
 
-        self.result_output.append("\n=== Explanation ===")
-        self.result_output.moveCursor(QTextCursor.End)
-        exp = self.classifier.explain(input_text)
+        prediction = self.classifier.classify(input_text)
+        self.result_output.setPlainText(f"Prediction: {prediction}")
 
-        if hasattr(self, "canvas") and self.canvas:
-            self.layout().removeWidget(self.canvas)
+        if self.model_type == "llama":
+            self.explanation_output.clear()
+            self.sentiment_bar_layout.setEnabled(False)
+        else:
+            self.show_explanation(input_text, prediction)
+            self.show_sentiment_bar(input_text)
+
+    def show_explanation(self, input_text, prediction):
+        exp = self.classifier.explain(input_text)
+        highlighted = self.highlight_text(input_text, exp)
+        word_contribs = "".join([
+            f'<span style="color:{"green" if weight > 0 else "red"}; font-weight:bold;">{word}: {weight:.4f}</span><br>'
+            for word, weight in exp.as_list()
+        ])
+        self.explanation_output.setHtml(f"""
+            <b>Prediction:</b> {prediction}<br><br>
+            <b>Input with Highlights:</b><br><br>{highlighted}<br><br>
+            <b>Word Contribution:</b><br>{word_contribs}
+        """)
+
+    def highlight_text(self, text, explanation):
+        # Iterate over the list of words and weights to apply highlighting
+        for word, weight in sorted(explanation.as_list(), key=lambda x: -len(x[0])):
+            # Use a stronger intensity for color visibility
+            intensity = min(255, int(abs(weight) * 255))  # Use a max of 255 for intensity
+
+            # Choose colors based on intensity and weight (positive or negative)
+            if weight > 0:
+                bg_color = f"rgb(0, 255, 0)"  # Bright Green for positive words
+                text_color = "black"
+            else:
+                bg_color = f"rgb(255, 0, 0)"  # Bright Red for negative words
+                text_color = "white"
+
+            # Add padding and border radius to make the highlight more noticeable
+            span = f'<span style="background-color:{bg_color}; color:{text_color}; padding:4px; border-radius:4px;">{word}</span>'
+            
+            # Replace the word in the text with its highlighted version
+            text = text.replace(word, span, 1)
+
+        return text
+
+
+    def show_sentiment_bar(self, input_text):
+        probs = self.classifier.get_probs(input_text)
+        class_names = list(self.classifier.label_map.values())
+        if not probs:
+            return
+
+        if self.canvas:
+            self.sentiment_bar_layout.removeWidget(self.canvas)
             self.canvas.setParent(None)
             self.canvas.deleteLater()
             self.canvas = None
 
-        if exp:
-            words, weights = zip(*exp.as_list())
-            y_pos = np.arange(len(words))
+        values = [probs[c] for c in class_names]
+        fig, ax = plt.subplots(figsize=(5, 3))
+        colors = ["red" if c.lower() == "negative" else "green" for c in class_names]
+        ax.bar(class_names, values, color=colors)
+        ax.set_title("Sentiment Confidence")
+        fig.tight_layout()
 
-            fig = Figure(figsize=(6, 3))
-            ax = fig.add_subplot(111)
-            ax.barh(y_pos, weights, align='center', color='skyblue')
-            ax.set_yticks(y_pos)
-            ax.set_yticklabels(words)
-            ax.invert_yaxis()
-            ax.set_xlabel('Weight')
-            ax.set_title('LIME Explanation')
+        self.canvas = FigureCanvas(fig)
+        self.sentiment_bar_layout.addWidget(self.canvas)
+        self.canvas.draw()
 
-            self.canvas = FigureCanvas(fig)
-            self.layout().addWidget(self.canvas)
+    def clear_outputs(self):
+        self.result_output.clear()
+        self.explanation_output.clear()
+        if self.canvas:
+            self.sentiment_bar_layout.removeWidget(self.canvas)
+            self.canvas.setParent(None)
+            self.canvas.deleteLater()
+            self.canvas = None
+
+    def clear_inputs(self):
+        self.text_box.clear()
+        self.clear_outputs()
 
     def styles(self):
         return """
@@ -177,12 +276,6 @@ class TamilClassifierGUI(QWidget):
             border: 1px solid #ccc;
             border-radius: 4px;
             color: #333;
-        }
-
-        QComboBox QAbstractItemView {
-            background-color: #ffffff;
-            selection-background-color: #007bff;
-            selection-color: #ffffff;
         }
 
         QCheckBox, QPushButton {

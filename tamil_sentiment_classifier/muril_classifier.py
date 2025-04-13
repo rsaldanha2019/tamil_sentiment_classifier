@@ -57,6 +57,17 @@ class MurilClassifier:
             "sentiment": sentiment
         }
 
+    def get_probs(self, text):
+        """Method to get the probabilities for each sentiment class."""
+        inputs = self.preprocess([text])
+        with torch.inference_mode():
+            logits = self.model(**inputs)
+            probs = torch.softmax(logits, dim=1).cpu().detach().numpy()
+        
+        # Return a dictionary with sentiment labels and their corresponding probabilities
+        probs_dict = {self.label_map[i]: prob for i, prob in enumerate(probs[0])}
+        return probs_dict
+
     def explain(self, text, num_samples=300, num_features=5):
         class_names = list(self.label_map.values())
         explainer = LimeTextExplainer(class_names=class_names, split_expression=r'\W+')
