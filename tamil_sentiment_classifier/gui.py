@@ -1,6 +1,6 @@
-from re import escape
 import sys
 import os
+from re import escape
 from PySide6.QtWidgets import (
     QApplication, QWidget, QVBoxLayout, QLabel, QTextEdit,
     QPushButton, QHBoxLayout, QCheckBox, QComboBox, QSizePolicy, QTabWidget
@@ -13,13 +13,14 @@ import matplotlib.pyplot as plt
 from matplotlib.backends.backend_qt5agg import FigureCanvasQTAgg as FigureCanvas
 
 from tamil_sentiment_classifier.llama_classifier import LlamaClassifier
-from tamil_sentiment_classifier.muril_classifier import MurilClassifier
-from tamil_sentiment_classifier.xlmr_classifier import XLMRClassifier
+from tamil_sentiment_classifier.bert_family_classifier import BertFamilyClassifier
 
+# Updated model map with dynamic loading
 MODEL_MAP = {
     "llama": LlamaClassifier,
-    "muril": MurilClassifier,
-    "xlmr": XLMRClassifier
+    "muril": lambda: BertFamilyClassifier("muril"),
+    "xlmr": lambda: BertFamilyClassifier("xlmr"),
+    "indicbert": lambda: BertFamilyClassifier("indicbert"),
 }
 
 class TamilClassifierGUI(QWidget):
@@ -40,7 +41,6 @@ class TamilClassifierGUI(QWidget):
     def initUI(self):
         layout = QVBoxLayout(self)
 
-        # Title
         self.title_bar = QHBoxLayout()
         image_path = os.path.join("images", "nitk_logo.png")
         self.image_placeholder = QLabel()
@@ -61,7 +61,6 @@ class TamilClassifierGUI(QWidget):
         )
         layout.addLayout(self.title_bar)
 
-        # Input
         self.label = QLabel("Enter Tamil or Tanglish (SPACE to convert):")
         layout.addWidget(self.label)
 
@@ -72,7 +71,6 @@ class TamilClassifierGUI(QWidget):
         self.text_box.textChanged.connect(self.transliterate_on_space)
         layout.addWidget(self.text_box)
 
-        # Controls
         controls = QHBoxLayout()
         self.translit_checkbox = QCheckBox("Transliterate (Tanglish → Tamil)")
         self.translit_checkbox.setChecked(True)
@@ -93,7 +91,6 @@ class TamilClassifierGUI(QWidget):
         controls.addWidget(self.clear_button)
         layout.addLayout(controls)
 
-        # Tabs
         self.result_label = QLabel("Output:")
         layout.addWidget(self.result_label)
 
@@ -160,8 +157,8 @@ class TamilClassifierGUI(QWidget):
 
     def update_tabs_visibility(self):
         is_llama = self.model_type == "llama"
-        self.tabs.setTabVisible(1, not is_llama)  # Explanation tab
-        self.tabs.setTabVisible(2, not is_llama)  # Sentiment Bar
+        self.tabs.setTabVisible(1, not is_llama)
+        self.tabs.setTabVisible(2, not is_llama)
 
     def classify_text(self):
         input_text = self.text_box.toPlainText().strip()
@@ -192,27 +189,17 @@ class TamilClassifierGUI(QWidget):
         """)
 
     def highlight_text(self, text, explanation):
-        # Iterate over the list of words and weights to apply highlighting
         for word, weight in sorted(explanation.as_list(), key=lambda x: -len(x[0])):
-            # Use a stronger intensity for color visibility
-            intensity = min(255, int(abs(weight) * 255))  # Use a max of 255 for intensity
-
-            # Choose colors based on intensity and weight (positive or negative)
+            intensity = min(255, int(abs(weight) * 255))
             if weight > 0:
-                bg_color = f"rgb(0, 255, 0)"  # Bright Green for positive words
+                bg_color = f"rgb(0, 255, 0)"
                 text_color = "black"
             else:
-                bg_color = f"rgb(255, 0, 0)"  # Bright Red for negative words
+                bg_color = f"rgb(255, 0, 0)"
                 text_color = "white"
-
-            # Add padding and border radius to make the highlight more noticeable
             span = f'<span style="background-color:{bg_color}; color:{text_color}; padding:4px; border-radius:4px;">{word}</span>'
-            
-            # Replace the word in the text with its highlighted version
             text = text.replace(word, span, 1)
-
         return text
-
 
     def show_sentiment_bar(self, input_text):
         probs = self.classifier.get_probs(input_text)

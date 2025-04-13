@@ -3,6 +3,8 @@ import torch.nn as nn
 from transformers import AutoTokenizer, AutoModel
 from lime.lime_text import LimeTextExplainer
 import numpy as np
+import os
+
 
 class Model(nn.Module):
     def __init__(self, text_model, num_labels):
@@ -15,15 +17,38 @@ class Model(nn.Module):
         logits = self.fc(text_embed)
         return logits
 
-class MurilClassifier:
-    def __init__(self):
-        self.device = "cuda" if torch.cuda.is_available() else "cpu"
-        self.tokenizer = AutoTokenizer.from_pretrained("google/muril-base-cased")
 
-        base_model = AutoModel.from_pretrained("google/muril-base-cased")
+class BertFamilyClassifier:
+    def __init__(self, model_type):
+        self.device = "cuda" if torch.cuda.is_available() else "cpu"
+
+        # Map model types to HuggingFace names and saved .pt files (mbert removed)
+        self.model_map = {
+            "muril": {
+                "hf_model": "google/muril-base-cased",
+                "ckpt_file": "muril-xai.pt"
+            },
+            "xlmr": {
+                "hf_model": "xlm-roberta-base",
+                "ckpt_file": "xlmr-xai.pt"
+            },
+            "indicbert": {
+                "hf_model": "ai4bharat/indic-bert",
+                "ckpt_file": "indicbert-xai.pt"
+            }
+        }
+
+        if model_type not in self.model_map:
+            raise ValueError(f"Unsupported model type '{model_type}'. Choose from: {list(self.model_map.keys())}")
+
+        model_info = self.model_map[model_type]
+
+        self.tokenizer = AutoTokenizer.from_pretrained(model_info["hf_model"])
+        base_model = AutoModel.from_pretrained(model_info["hf_model"])
         self.model = Model(text_model=base_model, num_labels=4)
 
-        state_dict = torch.load("tamil_sentiment_classifier/saved_models/muril-xai.pt", map_location=self.device)
+        model_path = os.path.join("tamil_sentiment_classifier", "saved_models", model_info["ckpt_file"])
+        state_dict = torch.load(model_path, map_location=self.device)
         self.model.load_state_dict(state_dict)
 
         self.model.to(self.device)
@@ -35,6 +60,8 @@ class MurilClassifier:
             2: "Negative",
             3: "Mixed_feelings"
         }
+
+        self.model_type = model_type
 
     def preprocess(self, text_list):
         return self.tokenizer(
@@ -52,23 +79,21 @@ class MurilClassifier:
         sentiment = self.label_map.get(prediction, "Unknown")
 
         return {
-            "model": "muril",
+            "model": self.model_type,
             "input_text": text,
             "sentiment": sentiment
         }
 
     def get_probs(self, text):
-        """Method to get the probabilities for each sentiment class."""
+        """Return probabilities for each sentiment class."""
         inputs = self.preprocess([text])
         with torch.inference_mode():
             logits = self.model(**inputs)
             probs = torch.softmax(logits, dim=1).cpu().detach().numpy()
-        
-        # Return a dictionary with sentiment labels and their corresponding probabilities
-        probs_dict = {self.label_map[i]: prob for i, prob in enumerate(probs[0])}
-        return probs_dict
+        return {self.label_map[i]: prob for i, prob in enumerate(probs[0])}
 
     def explain(self, text, num_samples=300, num_features=5):
+        """Generate LIME explanation for given text."""
         class_names = list(self.label_map.values())
         explainer = LimeTextExplainer(class_names=class_names, split_expression=r'\W+')
 
