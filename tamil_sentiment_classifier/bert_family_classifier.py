@@ -55,10 +55,10 @@ class BertFamilyClassifier:
         self.model.eval()
 
         self.label_map = {
-            0: "Positive",
-            1: "Unknown",
-            2: "Negative",
-            3: "Mixed_feelings"
+            0: "Mixed_feelings",
+            1: "Negative",
+            2: "Positive",
+            3: "Unknown"
         }
 
         self.model_type = model_type
