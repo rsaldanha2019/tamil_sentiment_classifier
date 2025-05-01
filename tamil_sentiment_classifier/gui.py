@@ -93,8 +93,9 @@ class TamilClassifierGUI(QWidget):
         controls.addWidget(self.classify_button)
 
         self.clear_button = QPushButton("Clear")
-        self.clear_button.clicked.connect(self.clear_inputs)
+        self.clear_button.clicked.connect(self.clear_all)
         controls.addWidget(self.clear_button)
+
         layout.addLayout(controls)
 
         self.result_label = QLabel("Output:")
@@ -158,7 +159,7 @@ class TamilClassifierGUI(QWidget):
         if model_name != self.model_type:
             self.model_type = model_name
             self.classifier = MODEL_MAP[self.model_type]()
-            self.clear_outputs()
+            self.clear_all()
             self.update_tabs_visibility()
 
     def update_tabs_visibility(self):
@@ -202,17 +203,14 @@ class TamilClassifierGUI(QWidget):
                     word_class_weights[word] = {}
                 word_class_weights[word][label] = weight
 
-        # Build color-highlighted text
         highlighted_text = input_text
         for word in sorted(all_words, key=lambda w: -max(abs(word_class_weights[w].get(l, 0)) for l in word_class_weights[w])):
             if word in highlighted_text:
-                # Pick the class with the highest absolute weight for this word
                 best_label = max(word_class_weights[word], key=lambda l: abs(word_class_weights[word][l]))
                 color = self.class_colors.get(best_label, "#888888")
                 span = f'<span style="background-color:{color}; color:white; padding:2px; border-radius:3px;">{word}</span>'
                 highlighted_text = highlighted_text.replace(word, span, 1)
 
-        # Word-level breakdown
         word_contribs_html = ""
         for word in all_words:
             word_contribs_html += f"<b>{word}</b>: "
@@ -221,7 +219,6 @@ class TamilClassifierGUI(QWidget):
                 word_contribs_html += f'<span style="color:{color};">[{label}: {weight:+.3f}]</span> '
             word_contribs_html += "<br>"
 
-        # Legend
         legend_html = "<br><b>Color Legend:</b><br>" + "".join(
             f'<span style="background-color:{color}; color:white; padding:2px; border-radius:3px;"> {label} </span>&nbsp;&nbsp;'
             for label, color in self.class_colors.items()
@@ -234,57 +231,43 @@ class TamilClassifierGUI(QWidget):
             {legend_html}
         """)
 
-    def highlight_text(self, text, explanation, sentiment_label):
-        for word, weight in sorted(explanation, key=lambda x: -abs(x[1])):
-            if abs(weight) < 0.01:
-                continue
-            color = self.class_colors.get(sentiment_label, "#888888")
-            bg_color = color
-            text_color = "#000000"
-            span = f'<span style="background-color:{bg_color}; color:{text_color}; padding:2px; border-radius:3px;">{word}</span>'
-            text = text.replace(word, span, 1)
-        return text
-
     def show_sentiment_bar(self, input_text):
         probs = self.classifier.get_probs(input_text)
         class_names = list(self.classifier.label_map.values())
-        
+
         if not probs:
             return
 
-        # Initialize a dictionary to store the scores for each class label
         label_scores = {label: 0 for label in class_names}
-
-        # Get the explanations for the input text
         explanation = self.classifier.explain(input_text)
-
-        # Ensure contributions is a list of (word, weight) tuples
         contributions = explanation.get("contributions", {})
 
-        # Loop over the contributions and accumulate the weights for each class
         for label, word_weights in contributions.items():
             if isinstance(word_weights, list):
                 for word, weight in word_weights:
-                    # Accumulate the absolute weight for each class label
                     label_scores[label] += abs(weight)
 
-        # Now `label_scores` should contain the accumulated absolute weights for each class label
         values = [label_scores.get(label, 0) for label in class_names]
-        
         fig, ax = plt.subplots(figsize=(5, 3))
         colors = [self.class_colors.get(label, "#888") for label in class_names]
-        
         ax.bar(class_names, values, color=colors)
         ax.set_title("Sentiment Confidence")
         fig.tight_layout()
 
-        # Display the chart on the canvas
+        # Clear existing canvas
+        if self.canvas:
+            self.sentiment_bar_layout.removeWidget(self.canvas)
+            self.canvas.setParent(None)
+            self.canvas.deleteLater()
+            self.canvas = None
+
+        # Add new canvas
         self.canvas = FigureCanvas(fig)
         self.sentiment_bar_layout.addWidget(self.canvas)
         self.canvas.draw()
 
-
-    def clear_outputs(self):
+    def clear_all(self):
+        self.text_box.clear()
         self.result_output.clear()
         self.explanation_output.clear()
         if self.canvas:
@@ -292,10 +275,6 @@ class TamilClassifierGUI(QWidget):
             self.canvas.setParent(None)
             self.canvas.deleteLater()
             self.canvas = None
-
-    def clear_inputs(self):
-        self.text_box.clear()
-        self.clear_outputs()
 
     def styles(self):
         return """
