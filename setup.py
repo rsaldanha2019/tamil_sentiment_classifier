@@ -1,20 +1,14 @@
 from setuptools import setup, find_packages
 import os
-import pathlib
 import subprocess
 import sys
-
-# Read dependencies from requirements.txt
-with open("requirements.txt", encoding="utf-8") as f:
-    requirements = f.read().splitlines()
+from pathlib import Path
 
 # Ensure saved_models exists or download it
-def download_saved_models():
-    model_dir = pathlib.Path(__file__).parent / "tamil_sentiment_classifier" / "saved_models"
-
-    if not model_dir.exists() or not any(model_dir.iterdir()):
+def ensure_models():
+    model_dir = Path(__file__).parent / "tamil_sentiment_classifier" / "saved_models"
+    if not model_dir.exists() or not any(model_dir.glob("*.pt")):
         print("Downloading saved models into:", model_dir)
-
         try:
             import gdown
         except ImportError:
@@ -23,18 +17,26 @@ def download_saved_models():
 
         model_dir.mkdir(parents=True, exist_ok=True)
 
-        # Download all model files from Google Drive
         gdown.download_folder(
             url="https://drive.google.com/drive/u/1/folders/14x1UdKTLEaCh8--WTt_TaEkOjqf3tF0A",
             output=str(model_dir),
             quiet=False,
-            use_cookies=False,
+            use_cookies=False
         )
     else:
-        print("saved_models already present, skipping download.")
+        print("Models already exist. Skipping download.")
 
-# Download models before packaging
-download_saved_models()
+# Call before setup
+ensure_models()
+
+# Read dependencies
+with open("requirements.txt", encoding="utf-8") as f:
+    requirements = f.read().splitlines()
+
+# Collect all .pt files under saved_models for package_data
+def collect_model_files():
+    model_dir = Path("tamil_sentiment_classifier/saved_models")
+    return [f"saved_models/{p.name}" for p in model_dir.glob("*.pt")]
 
 setup(
     name="tamil_sentiment_classifier",
@@ -49,7 +51,7 @@ setup(
     install_requires=requirements,
     include_package_data=True,
     package_data={
-        "tamil_sentiment_classifier": ["saved_models/*.pt"],
+        "tamil_sentiment_classifier": collect_model_files(),
     },
     entry_points={
         "console_scripts": [
