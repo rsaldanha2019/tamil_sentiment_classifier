@@ -1,6 +1,6 @@
 import argparse
 import sys
-
+from tabulate import tabulate
 from tamil_sentiment_classifier.llama_classifier import LlamaClassifier
 from tamil_sentiment_classifier.bert_family_classifier import BertFamilyClassifier
 
@@ -28,9 +28,18 @@ class UnifiedClassifierCLI:
         if explain:
             print("\n=== Explanation ===")
             explanation = self.classifier.explain(text)
-            for word, weight in explanation.as_list():
-                color = "green" if weight > 0 else "red"
-                print(f"{word}: {weight:.4f} ({color})")
+
+            contributions = explanation.get('contributions', {})
+            table_data = []
+
+            for label, word_weights in contributions.items():
+                for word, weight in word_weights:
+                    table_data.append([word, label, f"{weight:.4f}"])
+
+            headers = ['Word', 'Class', 'Contribution/Weight']
+            table = tabulate(table_data, headers=headers, tablefmt='grid')
+
+            print(table)
 
 def main():
     parser = argparse.ArgumentParser(description="Unified Tamil Sentiment Classifier CLI")

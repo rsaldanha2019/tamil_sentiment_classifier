@@ -11,17 +11,22 @@ from indic_transliteration import sanscript
 from indic_transliteration.sanscript import transliterate
 import matplotlib.pyplot as plt
 from matplotlib.backends.backend_qt5agg import FigureCanvasQTAgg as FigureCanvas
-
+import colorsys
 from tamil_sentiment_classifier.llama_classifier import LlamaClassifier
 from tamil_sentiment_classifier.bert_family_classifier import BertFamilyClassifier
 
-# Updated model map with dynamic loading
 MODEL_MAP = {
     "llama": LlamaClassifier,
     "muril": lambda: BertFamilyClassifier("muril"),
     "xlmr": lambda: BertFamilyClassifier("xlmr"),
     "indicbert": lambda: BertFamilyClassifier("indicbert"),
 }
+
+def generate_color_palette(n):
+    hsv_colors = [(x / n, 0.5, 0.9) for x in range(n)]
+    return [f"#{int(r*255):02x}{int(g*255):02x}{int(b*255):02x}"
+            for h, s, v in hsv_colors
+            for r, g, b in [colorsys.hsv_to_rgb(h, s, v)]]
 
 class TamilClassifierGUI(QWidget):
     def __init__(self):
@@ -33,6 +38,7 @@ class TamilClassifierGUI(QWidget):
         self.model_type = "llama"
         self.classifier = MODEL_MAP[self.model_type]()
         self.canvas = None
+        self.class_colors = {}
 
         self.initUI()
         self.setStyleSheet(self.styles())
@@ -57,7 +63,7 @@ class TamilClassifierGUI(QWidget):
         self.title_bar.addWidget(self.title_text)
         self.animate_label_color(
             colors=["#2F4F4F", "#8B0000", "#6A5ACD", "#556B2F", "#4682B4"],
-            font_sizes=[22, 24, 26, 24]
+            font_sizes=[26]
         )
         layout.addLayout(self.title_bar)
 
@@ -172,57 +178,111 @@ class TamilClassifierGUI(QWidget):
             self.explanation_output.clear()
             self.sentiment_bar_layout.setEnabled(False)
         else:
+            self.build_class_colors()
             self.show_explanation(input_text, prediction)
             self.show_sentiment_bar(input_text)
 
+    def build_class_colors(self):
+        if hasattr(self.classifier, "label_map"):
+            labels = list(self.classifier.label_map.values())
+            colors = generate_color_palette(len(labels))
+            self.class_colors = dict(zip(labels, colors))
+
     def show_explanation(self, input_text, prediction):
         exp = self.classifier.explain(input_text)
-        highlighted = self.highlight_text(input_text, exp)
-        word_contribs = "".join([
-            f'<span style="color:{"green" if weight > 0 else "red"}; font-weight:bold;">{word}: {weight:.4f}</span><br>'
-            for word, weight in exp.as_list()
-        ])
+        contributions = exp["contributions"]
+
+        all_words = set()
+        word_class_weights = {}
+
+        for label, word_weights in contributions.items():
+            for word, weight in word_weights:
+                all_words.add(word)
+                if word not in word_class_weights:
+                    word_class_weights[word] = {}
+                word_class_weights[word][label] = weight
+
+        # Build color-highlighted text
+        highlighted_text = input_text
+        for word in sorted(all_words, key=lambda w: -max(abs(word_class_weights[w].get(l, 0)) for l in word_class_weights[w])):
+            if word in highlighted_text:
+                # Pick the class with the highest absolute weight for this word
+                best_label = max(word_class_weights[word], key=lambda l: abs(word_class_weights[word][l]))
+                color = self.class_colors.get(best_label, "#888888")
+                span = f'<span style="background-color:{color}; color:white; padding:2px; border-radius:3px;">{word}</span>'
+                highlighted_text = highlighted_text.replace(word, span, 1)
+
+        # Word-level breakdown
+        word_contribs_html = ""
+        for word in all_words:
+            word_contribs_html += f"<b>{word}</b>: "
+            for label, weight in word_class_weights[word].items():
+                color = self.class_colors.get(label, "#888888")
+                word_contribs_html += f'<span style="color:{color};">[{label}: {weight:+.3f}]</span> '
+            word_contribs_html += "<br>"
+
+        # Legend
+        legend_html = "<br><b>Color Legend:</b><br>" + "".join(
+            f'<span style="background-color:{color}; color:white; padding:2px; border-radius:3px;"> {label} </span>&nbsp;&nbsp;'
+            for label, color in self.class_colors.items()
+        )
+
         self.explanation_output.setHtml(f"""
             <b>Prediction:</b> {prediction}<br><br>
-            <b>Input with Highlights:</b><br><br>{highlighted}<br><br>
-            <b>Word Contribution:</b><br>{word_contribs}
+            <b>Input with Highlights:</b><br><br>{highlighted_text}<br><br>
+            <b>Word Contributions:</b><br>{word_contribs_html}
+            {legend_html}
         """)
 
-    def highlight_text(self, text, explanation):
-        for word, weight in sorted(explanation.as_list(), key=lambda x: -len(x[0])):
-            intensity = min(255, int(abs(weight) * 255))
-            if weight > 0:
-                bg_color = f"rgb(0, 255, 0)"
-                text_color = "black"
-            else:
-                bg_color = f"rgb(255, 0, 0)"
-                text_color = "white"
-            span = f'<span style="background-color:{bg_color}; color:{text_color}; padding:4px; border-radius:4px;">{word}</span>'
+    def highlight_text(self, text, explanation, sentiment_label):
+        for word, weight in sorted(explanation, key=lambda x: -abs(x[1])):
+            if abs(weight) < 0.01:
+                continue
+            color = self.class_colors.get(sentiment_label, "#888888")
+            bg_color = color
+            text_color = "#000000"
+            span = f'<span style="background-color:{bg_color}; color:{text_color}; padding:2px; border-radius:3px;">{word}</span>'
             text = text.replace(word, span, 1)
         return text
 
     def show_sentiment_bar(self, input_text):
         probs = self.classifier.get_probs(input_text)
         class_names = list(self.classifier.label_map.values())
+        
         if not probs:
             return
 
-        if self.canvas:
-            self.sentiment_bar_layout.removeWidget(self.canvas)
-            self.canvas.setParent(None)
-            self.canvas.deleteLater()
-            self.canvas = None
+        # Initialize a dictionary to store the scores for each class label
+        label_scores = {label: 0 for label in class_names}
 
-        values = [probs[c] for c in class_names]
+        # Get the explanations for the input text
+        explanation = self.classifier.explain(input_text)
+
+        # Ensure contributions is a list of (word, weight) tuples
+        contributions = explanation.get("contributions", {})
+
+        # Loop over the contributions and accumulate the weights for each class
+        for label, word_weights in contributions.items():
+            if isinstance(word_weights, list):
+                for word, weight in word_weights:
+                    # Accumulate the absolute weight for each class label
+                    label_scores[label] += abs(weight)
+
+        # Now `label_scores` should contain the accumulated absolute weights for each class label
+        values = [label_scores.get(label, 0) for label in class_names]
+        
         fig, ax = plt.subplots(figsize=(5, 3))
-        colors = ["red" if c.lower() == "negative" else "green" for c in class_names]
+        colors = [self.class_colors.get(label, "#888") for label in class_names]
+        
         ax.bar(class_names, values, color=colors)
         ax.set_title("Sentiment Confidence")
         fig.tight_layout()
 
+        # Display the chart on the canvas
         self.canvas = FigureCanvas(fig)
         self.sentiment_bar_layout.addWidget(self.canvas)
         self.canvas.draw()
+
 
     def clear_outputs(self):
         self.result_output.clear()
@@ -240,7 +300,7 @@ class TamilClassifierGUI(QWidget):
     def styles(self):
         return """
         QWidget {
-            background-color: #f5f5f5;
+            background-color: #ffffff;
             font-family: Arial, sans-serif;
             font-size: 14px;
         }
