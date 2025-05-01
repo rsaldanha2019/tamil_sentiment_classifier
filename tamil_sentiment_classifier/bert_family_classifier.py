@@ -5,6 +5,7 @@ from lime.lime_text import LimeTextExplainer
 import numpy as np
 import os
 import re
+import pkg_resources
 
 
 class Model(nn.Module):
@@ -40,7 +41,8 @@ class BertFamilyClassifier:
 
         # Dynamically find matching checkpoint in saved_models
         ckpt_file = self._find_checkpoint_file(self.model_type)
-        model_path = os.path.join("tamil_sentiment_classifier", "saved_models", ckpt_file)
+        # model_path = os.path.join("tamil_sentiment_classifier", "saved_models", ckpt_file)
+        model_path = pkg_resources.resource_filename("tamil_sentiment_classifier", f"saved_models/{ckpt_file}")
         state_dict = torch.load(model_path, map_location=self.device)
         self.model.load_state_dict(state_dict)
 
@@ -55,7 +57,7 @@ class BertFamilyClassifier:
         }
 
     def _find_checkpoint_file(self, model_type):
-        ckpt_dir = os.path.join("tamil_sentiment_classifier", "saved_models")
+        ckpt_dir = pkg_resources.resource_filename("tamil_sentiment_classifier", "saved_models")
         for file in os.listdir(ckpt_dir):
             if model_type in file.lower() and file.endswith(".pt"):
                 return file
