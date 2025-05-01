@@ -8,13 +8,14 @@ import sys
 with open("requirements.txt", encoding="utf-8") as f:
     requirements = f.read().splitlines()
 
-# Ensure saved_models exists or download from Google Drive
+# Download model to tamil_sentiment_classifier/saved_models
 def download_saved_models():
-    print("Checking for 'saved_models' folder...")
-    model_dir = pathlib.Path(__file__).parent / "tamil_sentiment_classifier" / "saved_models"
+    print("Checking for 'tamil_sentiment_classifier/saved_models' folder...")
+    base_dir = pathlib.Path(__file__).parent
+    model_dir = base_dir / "tamil_sentiment_classifier" / "saved_models"
 
     if not model_dir.exists() or not any(model_dir.iterdir()):
-        print("Downloading saved models from Google Drive...")
+        print("Downloading saved models into package directory...")
 
         try:
             import gdown
@@ -25,7 +26,6 @@ def download_saved_models():
 
         model_dir.mkdir(parents=True, exist_ok=True)
 
-        # Google Drive folder download
         gdown.download_folder(
             url="https://drive.google.com/drive/u/1/folders/14x1UdKTLEaCh8--WTt_TaEkOjqf3tF0A",
             output=str(model_dir),
@@ -33,9 +33,9 @@ def download_saved_models():
             use_cookies=False,
         )
     else:
-        print("'saved_models' folder already exists. Skipping download.")
+        print("'saved_models' already exists inside the package. Skipping download.")
 
-# Run model download before setup
+# Run before setup
 download_saved_models()
 
 setup(
