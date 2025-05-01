@@ -8,24 +8,22 @@ import sys
 with open("requirements.txt", encoding="utf-8") as f:
     requirements = f.read().splitlines()
 
-# Download model to tamil_sentiment_classifier/saved_models
+# Ensure saved_models exists or download it
 def download_saved_models():
-    print("Checking for 'tamil_sentiment_classifier/saved_models' folder...")
-    base_dir = pathlib.Path(__file__).parent
-    model_dir = base_dir / "tamil_sentiment_classifier" / "saved_models"
+    model_dir = pathlib.Path(__file__).parent / "tamil_sentiment_classifier" / "saved_models"
 
     if not model_dir.exists() or not any(model_dir.iterdir()):
-        print("Downloading saved models into package directory...")
+        print("Downloading saved models into:", model_dir)
 
         try:
             import gdown
         except ImportError:
-            print("Installing 'gdown' package...")
             subprocess.check_call([sys.executable, "-m", "pip", "install", "gdown"])
             import gdown
 
         model_dir.mkdir(parents=True, exist_ok=True)
 
+        # Download all model files from Google Drive
         gdown.download_folder(
             url="https://drive.google.com/drive/u/1/folders/14x1UdKTLEaCh8--WTt_TaEkOjqf3tF0A",
             output=str(model_dir),
@@ -33,9 +31,9 @@ def download_saved_models():
             use_cookies=False,
         )
     else:
-        print("'saved_models' already exists inside the package. Skipping download.")
+        print("saved_models already present, skipping download.")
 
-# Run before setup
+# Download models before packaging
 download_saved_models()
 
 setup(
@@ -49,6 +47,10 @@ setup(
     url="https://github.com/rsaldanha2019/tamil_sentiment_classifier",
     packages=find_packages(),
     install_requires=requirements,
+    include_package_data=True,
+    package_data={
+        "tamil_sentiment_classifier": ["saved_models/*.pt"],
+    },
     entry_points={
         "console_scripts": [
             "tamil-sentiment-classifier-cli=tamil_sentiment_classifier.cli:main",
