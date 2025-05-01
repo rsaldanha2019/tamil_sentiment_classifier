@@ -32,9 +32,18 @@ def download_models(model_dir):
         use_cookies=False
     )
 
-def list_model_files():
+def list_package_files():
+    files = []
+
+    # Add model checkpoint files from saved_models/
     model_dir = Path(PACKAGE_NAME) / MODEL_FOLDER
-    return [f"{MODEL_FOLDER}/{f.name}" for f in model_dir.glob("*.pt")]
+    files += [f"{MODEL_FOLDER}/{f.name}" for f in model_dir.glob("*.pt")]
+
+    # Add images from images/
+    image_dir = Path(PACKAGE_NAME) / "images"
+    files += [f"images/{f.name}" for f in image_dir.glob("*.png")]
+
+    return files
 
 # --- Run before setup ---
 model_dir = ensure_clean_model_dir()
@@ -58,7 +67,7 @@ setup(
     install_requires=requirements,
     include_package_data=True,
     package_data={
-        PACKAGE_NAME: list_model_files(),
+        PACKAGE_NAME: list_package_files(),
     },
     entry_points={
         "console_scripts": [

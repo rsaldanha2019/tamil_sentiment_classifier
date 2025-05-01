@@ -48,7 +48,7 @@ class TamilClassifierGUI(QWidget):
         layout = QVBoxLayout(self)
 
         self.title_bar = QHBoxLayout()
-        image_path = os.path.join("images", "nitk_logo.png")
+        image_path = os.path.join(os.path.dirname(__file__), "images", "nitk_logo.png")
         self.image_placeholder = QLabel()
         pixmap = QPixmap(image_path)
         if pixmap.isNull():
@@ -254,14 +254,12 @@ class TamilClassifierGUI(QWidget):
         ax.set_title("Sentiment Confidence")
         fig.tight_layout()
 
-        # Clear existing canvas
         if self.canvas:
             self.sentiment_bar_layout.removeWidget(self.canvas)
             self.canvas.setParent(None)
             self.canvas.deleteLater()
             self.canvas = None
 
-        # Add new canvas
         self.canvas = FigureCanvas(fig)
         self.sentiment_bar_layout.addWidget(self.canvas)
         self.canvas.draw()
@@ -280,13 +278,14 @@ class TamilClassifierGUI(QWidget):
         return """
         QWidget {
             background-color: #ffffff;
+            color: #000000;
             font-family: Arial, sans-serif;
             font-size: 14px;
         }
 
         QLabel {
             font-weight: bold;
-            color: #333;
+            color: #333333;
         }
 
         QTextEdit {
@@ -294,6 +293,7 @@ class TamilClassifierGUI(QWidget):
             border: 1px solid #ccc;
             border-radius: 5px;
             padding: 6px;
+            color: #000000;
         }
 
         QComboBox {
@@ -301,11 +301,12 @@ class TamilClassifierGUI(QWidget):
             background-color: #f0f0f0;
             border: 1px solid #ccc;
             border-radius: 4px;
-            color: #333;
+            color: #000000;
         }
 
         QCheckBox, QPushButton {
             padding: 6px;
+            color: #000000;
         }
 
         QPushButton {

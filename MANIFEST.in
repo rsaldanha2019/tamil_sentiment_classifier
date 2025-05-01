@@ -1,1 +1,9 @@
+# Include all .pt model files from saved_models/
 recursive-include tamil_sentiment_classifier/saved_models *.pt
+
+# Include all .png image files from images/
+recursive-include tamil_sentiment_classifier/images *.png
+
+# Optional: include README and requirements if needed
+include README.md
+include requirements.txt
