@@ -17,9 +17,9 @@ from tamil_sentiment_classifier.bert_family_classifier import BertFamilyClassifi
 
 MODEL_MAP = {
     "llama": LlamaClassifier,
-    "muril": lambda: BertFamilyClassifier("muril"),
-    "xlmr": lambda: BertFamilyClassifier("xlmr"),
-    "indicbert": lambda: BertFamilyClassifier("indicbert"),
+    "muril-fine-tuned": lambda: BertFamilyClassifier("muril"),
+    "xlmr-fine-tuned": lambda: BertFamilyClassifier("xlmr"),
+    "indicbert-fine-tuned": lambda: BertFamilyClassifier("indicbert"),
 }
 
 def generate_color_palette(n):
